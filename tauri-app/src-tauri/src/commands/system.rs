@@ -58,7 +58,7 @@ fn windows_accent_color() -> Option<SystemAccentColor> {
 
     let current_user = RegKey::predef(HKEY_CURRENT_USER);
     let dwm = current_user
-        .open_subkey("Software\\Microsoft\\Windows\\DWM")
+        .open_subkey("SoftwareMicrosoftWindowsDWM")
         .ok()?;
     let value: u32 = dwm.get_value("AccentColor").ok()?;
     Some(accent_color(argb_to_hex(value), "windows-dwm"))
@@ -66,7 +66,6 @@ fn windows_accent_color() -> Option<SystemAccentColor> {
 
 #[cfg(windows)]
 fn argb_to_hex(value: u32) -> String {
-    // Windows stores AccentColor as AABBGGRR.
     format!(
         "#{:02x}{:02x}{:02x}",
         value & 0xff,
@@ -125,7 +124,6 @@ fn linux_accent_color() -> Option<SystemAccentColor> {
     Some(accent_color(hex, "gnome-accent"))
 }
 
-/// Read the desktop accent color once at application startup.
 #[tauri::command]
 pub fn get_system_accent_color() -> SystemAccentColor {
     #[cfg(windows)]
@@ -228,7 +226,6 @@ fn should_capture_loopback(
     transport_active && audio_received && aec_enabled && runtime_available
 }
 
-/// Platform-specific ONNX Runtime shared library filename.
 const fn ort_runtime_filename() -> &'static str {
     #[cfg(target_os = "windows")]
     {
@@ -244,14 +241,10 @@ const fn ort_runtime_filename() -> &'static str {
     }
 }
 
-/// Find the ONNX Runtime shared library bundled alongside the application.
-/// Searches `libs/` relative to the executable / build tree, and the resource
-/// root itself (production builds copy the lib into `resources/`).
 fn find_ort_runtime(resource_root: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
     let filename = ort_runtime_filename();
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
 
-    // Resource root (production: DLL copied into resources/ before bundling)
     if let Some(root) = resource_root {
         candidates.push(root.join(filename));
         if let Some(parent) = root.parent() {
@@ -260,7 +253,6 @@ fn find_ort_runtime(resource_root: Option<&std::path::Path>) -> Option<std::path
         }
     }
 
-    // Executable-relative
     if let Some(exe_dir) = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(std::path::Path::to_path_buf))
@@ -286,7 +278,6 @@ fn find_ort_runtime(resource_root: Option<&std::path::Path>) -> Option<std::path
         }
     }
 
-    // Dev mode: src-tauri/libs/
     candidates.push(
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("libs")
@@ -296,24 +287,16 @@ fn find_ort_runtime(resource_root: Option<&std::path::Path>) -> Option<std::path
     candidates.into_iter().find(|p| p.exists())
 }
 
-/// Locate the directory containing MicYou's bundled runtime resources (ONNX
-/// models and the ALSA config). Linux packages use the standard
-/// /usr/bin + /usr/lib/micyou/resources layout, while AppImage exposes the
-/// same tree below its temporary mount point.
 fn find_resource_dir(resource_dir: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
     const MARKERS: [&str; 2] = ["purevox6.onnx", "aec7_ep0185.onnx"];
 
     let mut candidates = Vec::new();
 
-    // Runtime resource dir resolved by Tauri (correct in dev and when the
-    // binary name matches the product name).
     if let Some(dir) = resource_dir {
         candidates.push(dir.to_path_buf());
         candidates.push(dir.join("resources"));
     }
 
-    // Executable-relative (covers `cargo run`, `tauri dev` and installs where
-    // resources live next to the binary).
     if let Some(executable_dir) = std::env::current_exe()
         .ok()
         .and_then(|path| path.parent().map(std::path::Path::to_path_buf))
@@ -325,7 +308,6 @@ fn find_resource_dir(resource_dir: Option<&std::path::Path>) -> Option<std::path
         }
     }
 
-    // Compile-time fallback for `cargo run` from the workspace.
     candidates.push(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources"));
 
     candidates
@@ -373,8 +355,6 @@ async fn rollback_start(
 use crate::tray::{TrayContext, TrayMenuStrings, TrayState};
 use micyou_audio::dsp::DspProcessor;
 
-/// Normalize a raw persisted output-device value ("", "auto", "default" all
-/// mean "no explicit device") to the Option form used by the audio engine.
 pub fn normalize_output_device(raw: &str) -> Option<String> {
     let d = raw.trim();
     if d.is_empty() || d == "auto" || d == "default" {
@@ -384,11 +364,6 @@ pub fn normalize_output_device(raw: &str) -> Option<String> {
     }
 }
 
-/// Create and open the persistent audio output device (cpal stream, plus the
-/// PipeWire virtual sink/source on Linux). Idempotent: re-opening only happens
-/// if the stream is not already open, so repeated calls from app startup and
-/// server start are safe. Called at GUI startup and lazily from the audio
-/// thread on the first server start (CLI/TUI).
 pub fn ensure_audio_output_started(
     audio_output: &std::sync::Arc<crate::audio_output::AudioOutputHandle>,
     output_device: Option<String>,
@@ -398,7 +373,6 @@ pub fn ensure_audio_output_started(
     #[cfg(target_os = "linux")]
     let resolved_resource_dir = find_resource_dir(_resource_dir);
 
-    // On Linux, create the PipeWire virtual sink/source before opening output.
     #[cfg(target_os = "linux")]
     {
         if output_device.is_none()
@@ -416,8 +390,6 @@ pub fn ensure_audio_output_started(
     audio_output.ensure_open(output_device, output_buffer_ms)
 }
 
-/// Tear down the persistent audio output device. Only called when the process
-/// is exiting (GUI `RunEvent::Exit`, CLI/TUI shutdown), never on server stop.
 pub fn shutdown_audio_output(state: &ServerState) {
     state.audio_output.shutdown();
     #[cfg(target_os = "linux")]
@@ -442,7 +414,6 @@ pub async fn start_server(
     let events: crate::events::SharedEvents =
         std::sync::Arc::new(crate::events::TauriEventSink(app_handle.clone()));
     let resource_dir = app_handle.path().resource_dir().ok();
-    // Reload shared settings.json before starting so CLI-side changes apply
     let file_settings = crate::app_config::load_dsp_settings();
     if let Ok(mut current) = state.dsp_settings.write() {
         *current = file_settings;
@@ -459,8 +430,6 @@ pub async fn start_server(
     .await
 }
 
-/// Core server startup, independent of the Tauri runtime.
-/// Shared by the GUI, CLI (`micyou-cli serve`) and TUI (`micyou-tui`).
 pub async fn start_server_inner(
     state: &ServerState,
     port: u16,
@@ -485,7 +454,6 @@ pub async fn start_server_inner(
         token
     };
 
-    // Start mDNS
     {
         let mut mdns_lock = state.mdns_manager.lock().await;
         match crate::network::NetworkManager::start_mdns(port, &bind_addr) {
@@ -498,7 +466,6 @@ pub async fn start_server_inner(
         }
     }
 
-    // Wire control plane handlers from plugins into the server state + transport
     let stats_clone = state.network_stats.clone();
     let events_clone = events.clone();
     let active_conn_clone = state.active_connection.clone();
@@ -519,8 +486,14 @@ pub async fn start_server_inner(
             let plugins = plugins_clone.clone();
             move |muted: bool| {
                 stats.set_muted(muted);
-                events.mute_state_changed(muted);
-                plugins.broadcast_event(&micyou_plugin::PluginEvent::MuteChanged { muted });
+                
+                let events = events.clone();
+                let plugins = plugins.clone();
+                tauri::async_runtime::spawn(async move {
+                    events.mute_state_changed(muted);
+                    plugins.broadcast_event(&micyou_plugin::PluginEvent::MuteChanged { muted });
+                });
+
                 let mute_msg = micyou_protocol::micyou::MessageWrapper {
                     audio_packet: None,
                     connect: None,
@@ -554,9 +527,16 @@ pub async fn start_server_inner(
             let plugins = plugins_clone.clone();
             move |enabled: bool| {
                 mon.store(enabled, std::sync::atomic::Ordering::Relaxed);
-                output.set_monitoring(enabled);
-                events.monitoring_state_changed(enabled);
-                plugins.broadcast_event(&micyou_plugin::PluginEvent::MonitoringChanged { enabled });
+                
+                let output = output.clone();
+                let events = events.clone();
+                let plugins = plugins.clone();
+                tauri::async_runtime::spawn(async move {
+                    output.set_monitoring(enabled);
+                    events.monitoring_state_changed(enabled);
+                    plugins.broadcast_event(&micyou_plugin::PluginEvent::MonitoringChanged { enabled });
+                });
+                
                 Ok(())
             }
         })),
@@ -608,31 +588,28 @@ pub async fn start_server_inner(
                     *guard = updated.clone();
                 }
                 let _ = crate::app_config::save_dsp_settings(&updated);
-                plugins.broadcast_event(&micyou_plugin::PluginEvent::DspSettingsChanged);
+                
+                let plugins = plugins.clone();
+                tauri::async_runtime::spawn(async move {
+                    plugins.broadcast_event(&micyou_plugin::PluginEvent::DspSettingsChanged);
+                });
+                
                 Ok(())
             }
         })),
     });
 
-    // Scan & load active plugins across GUI, CLI and TUI
     state.plugins.load_saved_plugins();
 
     let dsp_settings = state.dsp_settings.clone();
-    // Make sure the synthetic "Plugins" node is in the chain when DSP
-    // plugins are registered (runtime-only change, user can reorder).
     state.plugins.ensure_plugin_chain_node(&dsp_settings);
     let output_buffer_ms = dsp_settings
         .read()
         .map(|s| (s.output_buffer_ms as usize).clamp(100, 1200))
         .unwrap_or(800);
 
-    // Locate bundled resources (ONNX models + alsa config) once for the whole
-    // startup. On a packaged deb this does NOT equal Tauri's resource_dir().
     let resource_root = find_resource_dir(resource_dir.as_deref());
 
-    // Load the ONNX Runtime shared library.  The official Microsoft build uses
-    // runtime CPUID dispatch for AVX2/SSE kernels, so it works on CPUs without
-    // AVX2 (unlike the pykeio prebuilt binaries with x86-64-v3 baseline).
     if let Some(ort_path) = find_ort_runtime(resource_root.as_deref()) {
         if let Err(e) = micyou_audio::init_ort_runtime(&ort_path) {
             log::error!(
@@ -648,11 +625,8 @@ pub async fn start_server_inner(
     }
 
     let resolved_output_device = output_device;
-    // Bound queued latency: Android packets are ~7 ms, so 128 slots provide ample
-    // scheduling headroom without retaining seconds of stale audio.
     let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel(128);
 
-    // Start audio output pipeline (shared by all modes)
     let events_audio = events.clone();
     let is_web_mode = mode == "web";
     let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
@@ -660,16 +634,10 @@ pub async fn start_server_inner(
     let is_monitoring_flag = state.is_monitoring.clone();
     let spectrum_streaming_enabled = state.spectrum_streaming_enabled.clone();
     let active_audio_session_audio = state.active_audio_session.clone();
-    // The audio output device is persistent (created at app startup or on the
-    // first server start) and shared across server restarts. The audio thread
-    // only pushes decoded PCM into it; it never owns or tears it down.
     let audio_output_shared = state.audio_output.clone();
     let plugins_shared = state.plugins.clone();
 
     let audio_thread = std::thread::spawn(move || {
-        // Ensure the virtual device is open. This is normally a no-op (already
-        // opened at app startup); it also covers CLI/TUI first run and the rare
-        // case where opening failed earlier and a later attempt succeeds.
         if !ensure_audio_output_started(
             &audio_output_shared,
             resolved_output_device,
@@ -680,7 +648,6 @@ pub async fn start_server_inner(
         }
         let _ = ready_tx.send(Ok(()));
         let mut dsp_processor = DspProcessor::new(dsp_settings.clone(), resource_root);
-        // Attach the plugin DSP stage (runs when the chain reaches "Plugins").
         if let Some(hook) = plugins_shared.dsp_hook() {
             dsp_processor.set_external_hook(Some(hook));
         }
@@ -690,14 +657,9 @@ pub async fn start_server_inner(
         let mut current_input_sample_rate: u32 = 0;
         let mut resample_out_buf = Vec::new();
         let mut pcm_f32 = Vec::new();
-        // Opus decoder is keyed by (sample_rate, channel_count); recreated whenever
-        // those change or a new transport session starts (stateful codec).
         let mut opus_decoder: Option<(u32, usize, crate::opus::Decoder)> = None;
         let mut opus_float_buf: Vec<f32> = Vec::new();
 
-        // Speaker loopback capture for the AEC far-end reference. Windows uses
-        // WASAPI loopback; Linux records the default physical playback sink.
-        // Both start lazily only after an AEC-enabled session sends audio.
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         let loopback: Option<micyou_audio::LoopbackCapture> =
             Some(micyou_audio::LoopbackCapture::new());
@@ -706,14 +668,9 @@ pub async fn start_server_inner(
 
         let mut audio_received_for_session = false;
         let mut aec_runtime_available = true;
-        // A newly started server always begins with a fresh runtime state, even
-        // before the first client session arrives.
         if loopback.is_some() {
             restore_aec_runtime(&mut aec_runtime_available, &dsp_settings, &events_audio);
         }
-        // Sync the AEC far-end capture with actual audio flow. A control session
-        // alone is not enough: while waiting for the first valid audio packet,
-        // there is no microphone stream that needs an echo reference.
         let sync_loopback = |audio_received: &mut bool, runtime_available: &mut bool| {
             let transport_active = !matches!(
                 *active_audio_session_audio
@@ -759,15 +716,9 @@ pub async fn start_server_inner(
         };
 
         loop {
-            // Idle heartbeat every 500ms: with no device session the loopback
-            // capture stream stays stopped (biggest idle CPU win).
             match audio_rx.try_recv() {
                 Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
                 Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
-                    // Poll fast (10ms) while a session is active: audio packets
-                    // can arrive after a silence gap and must not sit in the
-                    // channel for up to 500ms (that caused audible dropouts at
-                    // the start of each utterance). Idle servers sleep 500ms.
                     let session_active =
                         sync_loopback(&mut audio_received_for_session, &mut aec_runtime_available);
                     std::thread::sleep(std::time::Duration::from_millis(if session_active {
@@ -812,8 +763,6 @@ pub async fn start_server_inner(
                     for ordered_packet in packets {
                         if let Some(audio_data) = ordered_packet.audio_packet {
                             if audio_data.codec == micyou_protocol::CODEC_OPUS {
-                                // Opus decode: reorder on flags/sample-rate changes, then
-                                // decode directly into f32 so it feeds the DSP chain intact.
                                 let channels = audio_data.channel_count as usize;
                                 let sample_rate = audio_data.sample_rate as u32;
                                 let needs_decoder = match &opus_decoder {
@@ -835,7 +784,7 @@ pub async fn start_server_inner(
                                     }
                                 }
                                 if let Some((_, _, decoder)) = opus_decoder.as_mut() {
-                                    let target_frames = (sample_rate as usize / 50) * channels; // 20ms
+                                    let target_frames = (sample_rate as usize / 50) * channels;
                                     if opus_float_buf.len() != target_frames {
                                         opus_float_buf.resize(target_frames, 0.0);
                                     }
@@ -948,17 +897,10 @@ pub async fn start_server_inner(
                                     0.0
                                 };
 
-                                // Web mode: skip DSP for now, output raw audio directly
                                 let processed_rms = if is_web_mode {
                                     let sum: f32 = pcm_f32.iter().map(|x| x * x).sum();
                                     (sum / pcm_f32.len() as f32).sqrt()
                                 } else {
-                                    // Read speaker loopback for AEC far-end reference.
-                                    // This captures the ACTUAL speaker output (WASAPI/BlackHole/PipeWire),
-                                    // which is the true echo source the phone mic picks up.
-                                    // Feed one mono reference sample for each near-end frame.
-                                    // Matching the processed frame count prevents drift when
-                                    // packet sizes or input sample rates vary.
                                     let near_frames = pcm_f32.len() / channels.max(1);
                                     if let Some(far_data) = loopback
                                         .as_ref()
@@ -1024,7 +966,6 @@ pub async fn start_server_inner(
         });
     }
 
-    // Web mode: start web server and return (skip TCP/UDP)
     #[cfg(feature = "web-server")]
     if mode == "web" {
         let web_port = port;
@@ -1200,7 +1141,6 @@ pub async fn stop_server(app: AppHandle, state: State<'_, ServerState>) -> Resul
     stop_server_inner(&state, events).await
 }
 
-/// Core server shutdown, independent of the Tauri runtime.
 pub async fn stop_server_inner(
     state: &ServerState,
     events: crate::events::SharedEvents,
@@ -1246,7 +1186,6 @@ pub async fn stop_server_inner(
         .await
         .join_audio_bounded(AUDIO_JOIN_TIMEOUT)
         .await;
-    // Restore the original input device on macOS (BlackHole cleanup)
     #[cfg(target_os = "macos")]
     {
         let _ = crate::blackhole::do_restore_input_device().await;
@@ -1304,7 +1243,6 @@ pub fn set_window_effects(app: AppHandle, enabled: bool) -> Result<(), String> {
     Ok(())
 }
 
-/// Windows-specific: custom window drag using raw Win32 API.
 #[cfg(windows)]
 #[tauri::command]
 pub async fn start_window_drag(app: AppHandle) -> Result<(), String> {
@@ -1397,8 +1335,6 @@ pub fn show_main_window(app: AppHandle) -> Result<(), String> {
 pub fn minimize_main_window(app: AppHandle) -> Result<(), String> {
     let win = main_window(&app)?;
 
-    // Wayland compositors may ignore xdg_toplevel.set_minimized. Hiding the
-    // window keeps the minimize-to-tray action reliable across Linux WMs.
     #[cfg(target_os = "linux")]
     return win.hide().map_err(|e| e.to_string());
 
@@ -1417,7 +1353,6 @@ pub const FLOATING_WINDOW_LABEL: &str = "floating-window";
 
 #[tauri::command]
 pub fn show_floating_window(_app: AppHandle) -> Result<(), String> {
-    // Temporarily disabled (Issue #307 postponed)
     log::info!("Floating window is temporarily disabled");
     Ok(())
 }
@@ -1432,7 +1367,6 @@ pub fn hide_floating_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub fn toggle_floating_window(_app: AppHandle) -> Result<bool, String> {
-    // Temporarily disabled (Issue #307 postponed)
     log::info!("Floating window is temporarily disabled");
     Ok(false)
 }

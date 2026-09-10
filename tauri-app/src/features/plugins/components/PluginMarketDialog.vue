@@ -5,46 +5,31 @@
         <div class="absolute inset-0 bg-black/50" @click="emit('close')" />
       </Transition>
       <div
-        class="relative w-full flex flex-col rounded-2xl border border-surface-variant/40 bg-surface shadow-2xl transition-all duration-300 ease-in-out"
-        :class="readmePlugin ? 'max-w-5xl max-h-[95vh]' : 'max-w-2xl max-h-[80vh]'"
+        class="relative w-full max-w-2xl max-h-[80vh] flex flex-col rounded-2xl border border-surface-variant/40 bg-surface shadow-2xl"
       >
         <div class="flex items-center justify-between px-5 py-4 border-b border-surface-variant/30">
-          <div v-if="!readmePlugin" class="flex items-center gap-2.5">
+          <div class="flex items-center gap-2.5">
             <Store class="w-5 h-5 text-primary" />
             <h2 class="text-base font-semibold">{{ $t('plugins.marketTitle') }}</h2>
             <span class="text-xs text-on-surface-variant">MicYou-Plugins</span>
           </div>
-          <div v-else class="flex items-center gap-2.5">
+          <div class="flex items-center gap-1">
+            <button
+              class="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary/10 px-3 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+              :title="$t('plugins.marketContribute')"
+              @click="openContributionGuide"
+            >
+              <GitPullRequest class="h-3.5 w-3.5" />
+              <span>{{ $t('plugins.marketContribute') }}</span>
+            </button>
             <button
               class="w-8 h-8 rounded-full hover:bg-surface-variant/40 flex items-center justify-center"
-              @click="closeReadme"
+              :title="$t('plugins.refresh')"
+              @click="load(); void refreshInstalled()"
             >
-              <ArrowLeft class="w-4 h-4" />
+              <Loader2 v-if="isLoading" class="w-4 h-4 animate-spin text-on-surface-variant" />
+              <RefreshCw v-else class="w-4 h-4 text-on-surface-variant" />
             </button>
-            <h2 class="text-base font-semibold truncate max-w-[200px] sm:max-w-md md:max-w-lg lg:max-w-xl">
-              {{ marketPluginName(readmePlugin, locale) }} README
-            </h2>
-          </div>
-
-          <div class="flex items-center gap-1">
-            <template v-if="!readmePlugin">
-              <button
-                class="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary/10 px-3 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
-                :title="$t('plugins.marketContribute')"
-                @click="openContributionGuide"
-              >
-                <GitPullRequest class="h-3.5 w-3.5" />
-                <span>{{ $t('plugins.marketContribute') }}</span>
-              </button>
-              <button
-                class="w-8 h-8 rounded-full hover:bg-surface-variant/40 flex items-center justify-center"
-                :title="$t('plugins.refresh')"
-                @click="load(); void refreshInstalled()"
-              >
-                <Loader2 v-if="isLoading" class="w-4 h-4 animate-spin text-on-surface-variant" />
-                <RefreshCw v-else class="w-4 h-4 text-on-surface-variant" />
-              </button>
-            </template>
             <button
               class="w-8 h-8 rounded-full hover:bg-surface-variant/40 flex items-center justify-center"
               @click="emit('close')"
@@ -55,225 +40,256 @@
         </div>
 
         <div class="flex-1 overflow-y-auto p-4 space-y-3">
-          <template v-if="readmePlugin">
-            <div v-if="readmeLoading" class="py-16 text-center text-sm text-on-surface-variant">
-              <Loader2 class="w-5 h-5 animate-spin mx-auto mb-2" />
-              {{ $t('plugins.marketLoading') }}
+          <div v-if="!isLoading && !loadError && catalog.plugins.length" class="space-y-3">
+            <div class="relative">
+              <Search class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60" />
+              <input
+                v-model="marketQuery"
+                type="text"
+                :placeholder="$t('plugins.marketSearch')"
+                class="w-full h-10 pl-9 pr-3 rounded-full bg-surface-variant/20 text-sm text-on-surface outline-none placeholder:text-on-surface-variant/60 focus:ring-1 focus:ring-primary/40"
+              />
             </div>
-            <div v-else-if="readmeError" class="p-4 rounded-lg bg-error/10 text-error text-sm border border-error/20">
-              {{ readmeError }}
-              <button class="underline ml-2" @click="openReadme(readmePlugin!)">{{ $t('plugins.retry') }}</button>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                v-for="k in ['all', 'dsp', 'utility', 'ui']"
+                :key="k"
+                class="px-3 py-1 rounded-full text-xs font-medium transition-colors duration-150 active:scale-95"
+                :class="
+                  kindFilter === k
+                    ? 'bg-primary/20 text-primary'
+                    : 'bg-surface-variant/30 text-on-surface-variant/80 hover:bg-surface-variant/50'
+                "
+                @click="kindFilter = k"
+              >
+                {{ k === 'all' ? $t('plugins.marketAll') : $t('plugins.kind.' + k) }}
+              </button>
             </div>
-            <div v-else v-html="readmeContent" class="readme-content max-w-none"></div>
-          </template>
+          </div>
 
-          <template v-else>
-            <div v-if="!isLoading && !loadError && catalog.plugins.length" class="space-y-3">
-              <div class="relative">
-                <Search class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60" />
-                <input
-                  v-model="marketQuery"
-                  type="text"
-                  :placeholder="$t('plugins.marketSearch')"
-                  class="w-full h-10 pl-9 pr-3 rounded-full bg-surface-variant/20 text-sm text-on-surface outline-none placeholder:text-on-surface-variant/60 focus:ring-1 focus:ring-primary/40"
-                />
-              </div>
-              <div class="flex flex-wrap gap-1.5">
-                <button
-                  v-for="k in ['all', 'dsp', 'utility', 'ui']"
-                  :key="k"
-                  class="px-3 py-1 rounded-full text-xs font-medium transition-colors duration-150 active:scale-95"
-                  :class="
-                    kindFilter === k
-                      ? 'bg-primary/20 text-primary'
-                      : 'bg-surface-variant/30 text-on-surface-variant/80 hover:bg-surface-variant/50'
-                  "
-                  @click="kindFilter = k"
-                >
-                  {{ k === 'all' ? $t('plugins.marketAll') : $t('plugins.kind.' + k) }}
-                </button>
-              </div>
-            </div>
+          <p v-if="loadError" class="text-sm text-error px-2 py-2">
+            {{ $t('plugins.marketFailed', { error: loadError }) }}
+            <button class="underline ml-2" @click="load">{{ $t('plugins.retry') }}</button>
+          </p>
 
-            <p v-if="loadError" class="text-sm text-error px-2 py-2">
-              {{ $t('plugins.marketFailed', { error: loadError }) }}
-              <button class="underline ml-2" @click="load">{{ $t('plugins.retry') }}</button>
-            </p>
+          <div v-else-if="isLoading" class="py-16 text-center text-sm text-on-surface-variant">
+            <Loader2 class="w-5 h-5 animate-spin mx-auto mb-2" />
+            {{ $t('plugins.marketLoading') }}
+          </div>
 
-            <div v-else-if="isLoading" class="py-16 text-center text-sm text-on-surface-variant">
-              <Loader2 class="w-5 h-5 animate-spin mx-auto mb-2" />
-              {{ $t('plugins.marketLoading') }}
-            </div>
+          <div
+            v-else-if="catalog.plugins.length === 0"
+            class="py-16 text-center text-sm text-on-surface-variant"
+          >
+            {{ $t('plugins.marketEmpty') }}
+          </div>
 
-            <div
-              v-else-if="catalog.plugins.length === 0"
-              class="py-16 text-center text-sm text-on-surface-variant"
-            >
-              {{ $t('plugins.marketEmpty') }}
-            </div>
+          <div
+            v-else-if="filteredCatalog.length === 0"
+            class="py-16 text-center text-sm text-on-surface-variant"
+          >
+            {{ $t('plugins.noPlugins') }}
+          </div>
 
-            <div
-              v-else-if="filteredCatalog.length === 0"
-              class="py-16 text-center text-sm text-on-surface-variant"
-            >
-              {{ $t('plugins.noPlugins') }}
-            </div>
-
-            <div
-              v-for="plugin in filteredCatalog"
-              :key="plugin.id"
-              class="rounded-xl border border-surface-variant/30 bg-surface-bright p-4 transition-all duration-200 hover:border-primary/30 hover:shadow-lg hover:shadow-black/20"
-            >
-              <div class="flex gap-3">
-                <img
-                  v-if="plugin.previewUrl"
-                  :src="plugin.previewUrl"
-                  alt=""
-                  class="w-24 h-16 rounded-lg object-cover shrink-0 bg-surface-variant/30"
-                  @error="onPreviewError"
-                />
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0">
-                      <div class="flex items-center gap-2 flex-wrap">
-                        <span class="font-semibold text-sm">{{
-                          marketPluginName(plugin, locale)
-                        }}</span>
-                        <span
-                          class="text-xs px-2 py-0.5 rounded-full bg-primary/15 text-primary font-medium"
-                        >
-                          {{ plugin.version }}
-                        </span>
-                        <span
-                          class="text-xs px-2 py-0.5 rounded-full"
-                          :class="
-                            plugin.runtime === 'wasm'
-                              ? 'bg-emerald-500/15 text-emerald-400'
-                              : 'bg-amber-500/15 text-amber-400'
-                          "
-                        >
-                          {{ plugin.runtime === 'wasm' ? 'WASM' : 'Native' }}
-                        </span>
-                        <span
-                          class="text-xs px-2 py-0.5 rounded-full"
-                          :class="
-                            plugin.kind === 'dsp'
-                              ? 'bg-sky-500/15 text-sky-400'
-                              : 'bg-surface-variant/50 text-on-surface-variant'
-                          "
-                        >
-                          {{ $t('plugins.kind.' + plugin.kind) }}
-                        </span>
-                      </div>
-                      <p class="text-xs text-on-surface-variant mt-1 truncate">{{ plugin.id }}</p>
-                      <p class="text-sm text-on-surface-variant mt-1 line-clamp-2">
-                        {{ plugin.description || '—' }}
-                      </p>
-                      <div class="flex flex-wrap gap-1.5 mt-2">
-                        <span
-                          v-for="cap in plugin.capabilities"
-                          :key="cap"
-                          class="text-[11px] px-2 py-0.5 rounded-full bg-surface-variant/40 text-on-surface-variant"
-                        >
-                          {{ cap }}
-                        </span>
-                        <span
-                          v-for="p in plugin.platforms || []"
-                          :key="'p' + p"
-                          class="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400"
-                        >
-                          {{ p }}
-                        </span>
-                        <span
-                          v-for="a in plugin.arches || []"
-                          :key="'a' + a"
-                          class="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400"
-                        >
-                          {{ a }}
-                        </span>
-                      </div>
-                      <p
-                        v-if="plugin.author || plugin.license"
-                        class="text-[11px] text-on-surface-variant mt-2"
+          <div
+            v-for="plugin in filteredCatalog"
+            :key="plugin.id"
+            class="rounded-xl border border-surface-variant/30 bg-surface-bright p-4 transition-all duration-200 hover:border-primary/30 hover:shadow-lg hover:shadow-black/20"
+          >
+            <div class="flex gap-3">
+              <img
+                v-if="plugin.previewUrl"
+                :src="plugin.previewUrl"
+                alt=""
+                class="w-24 h-16 rounded-lg object-cover shrink-0 bg-surface-variant/30"
+                @error="onPreviewError"
+              />
+              <div class="min-w-0 flex-1">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="font-semibold text-sm">{{
+                        marketPluginName(plugin, locale)
+                      }}</span>
+                      <span
+                        class="text-xs px-2 py-0.5 rounded-full bg-primary/15 text-primary font-medium"
                       >
-                        {{ plugin.author ? plugin.author : '' }}
-                        <span v-if="plugin.author && plugin.license" class="mx-1">·</span>
-                        <span v-if="plugin.license">{{ plugin.license }}</span>
-                      </p>
-                    </div>
-                    <div class="shrink-0 flex items-center gap-2">
-                      <button
-                        v-if="plugin.readmeUrl"
-                        class="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-surface-variant/40 text-on-surface-variant hover:bg-surface-variant/60 transition-colors"
-                        @click.stop="openReadme(plugin)"
-                      >
-                        <BookOpen class="w-3.5 h-3.5" />
-                        <span>README</span>
-                      </button>
-                      <button
-                        class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-medium transition-colors disabled:opacity-50"
+                        {{ plugin.version }}
+                      </span>
+                      <span
+                        class="text-xs px-2 py-0.5 rounded-full"
                         :class="
-                          installedIds.includes(plugin.id)
-                            ? 'bg-surface-variant/40 text-on-surface-variant cursor-default'
-                            : 'bg-primary text-on-primary hover:bg-primary/90'
+                          plugin.runtime === 'wasm'
+                            ? 'bg-emerald-500/15 text-emerald-400'
+                            : 'bg-amber-500/15 text-amber-400'
                         "
-                        :disabled="installedIds.includes(plugin.id) || installingId === plugin.id"
-                        @click="install(plugin)"
                       >
-                        <Loader2 v-if="installingId === plugin.id" class="w-3.5 h-3.5 animate-spin" />
-                        <Check v-else-if="installedIds.includes(plugin.id)" class="w-3.5 h-3.5" />
-                        <span>
-                          {{
-                            installingId === plugin.id
-                              ? $t('plugins.marketInstalling')
-                              : installedIds.includes(plugin.id)
-                                ? $t('plugins.marketInstalled')
-                                : $t('plugins.marketInstall')
-                          }}
-                        </span>
-                      </button>
+                        {{ plugin.runtime === 'wasm' ? 'WASM' : 'Native' }}
+                      </span>
+                      <span
+                        class="text-xs px-2 py-0.5 rounded-full"
+                        :class="
+                          plugin.kind === 'dsp'
+                            ? 'bg-sky-500/15 text-sky-400'
+                            : 'bg-surface-variant/50 text-on-surface-variant'
+                        "
+                      >
+                        {{ $t('plugins.kind.' + plugin.kind) }}
+                      </span>
                     </div>
-                  </div>
-                  <div
-                    v-if="confirmingId === plugin.id && preview"
-                    class="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3"
-                  >
-                    <p class="text-xs font-medium text-amber-300">{{ $t('plugins.marketConfirm') }}</p>
+                    <p class="text-xs text-on-surface-variant mt-1 truncate">{{ plugin.id }}</p>
+                    <p class="text-sm text-on-surface-variant mt-1 line-clamp-2">
+                      {{ plugin.description || '—' }}
+                    </p>
                     <div class="flex flex-wrap gap-1.5 mt-2">
                       <span
-                        v-for="cap in preview.capabilities"
+                        v-for="cap in plugin.capabilities"
                         :key="cap"
-                        class="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300"
+                        class="text-[11px] px-2 py-0.5 rounded-full bg-surface-variant/40 text-on-surface-variant"
                       >
                         {{ cap }}
                       </span>
+                      <span
+                        v-for="p in plugin.platforms || []"
+                        :key="'p' + p"
+                        class="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400"
+                      >
+                        {{ p }}
+                      </span>
+                      <span
+                        v-for="a in plugin.arches || []"
+                        :key="'a' + a"
+                        class="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400"
+                      >
+                        {{ a }}
+                      </span>
                     </div>
-                    <p class="text-[11px] text-amber-200/80 mt-2">
-                      {{ $t('plugins.marketConfirmText') }}
+                    <p
+                      v-if="plugin.author || plugin.license"
+                      class="text-[11px] text-on-surface-variant mt-2"
+                    >
+                      {{ plugin.author ? plugin.author : '' }}
+                      <span v-if="plugin.author && plugin.license" class="mx-1">·</span>
+                      <span v-if="plugin.license">{{ plugin.license }}</span>
                     </p>
-                    <div class="flex gap-2 mt-3">
-                      <button
-                        class="px-3 py-1.5 rounded-full text-xs bg-amber-500 text-amber-950 font-medium hover:bg-amber-400"
-                        @click="confirmInstall(plugin)"
-                      >
-                        {{ $t('plugins.marketInstall') }}
-                      </button>
-                      <button
-                        class="px-3 py-1.5 rounded-full text-xs bg-surface-variant/40 hover:bg-surface-variant"
-                        @click="cancelConfirm"
-                      >
-                        {{ $t('plugins.cancel') }}
-                      </button>
-                    </div>
+                  </div>
+                  <div class="shrink-0 flex items-center gap-2">
+                    <button
+                      v-if="plugin.readmeUrl"
+                      class="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-surface-variant/40 text-on-surface-variant hover:bg-surface-variant/60 transition-colors"
+                      @click.stop="openReadme(plugin)"
+                    >
+                      <BookOpen class="w-3.5 h-3.5" />
+                      <span>README</span>
+                    </button>
+                    <button
+                      class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-medium transition-colors disabled:opacity-50"
+                      :class="
+                        installedIds.includes(plugin.id)
+                          ? 'bg-surface-variant/40 text-on-surface-variant cursor-default'
+                          : 'bg-primary text-on-primary hover:bg-primary/90'
+                      "
+                      :disabled="installedIds.includes(plugin.id) || installingId === plugin.id"
+                      @click="install(plugin)"
+                    >
+                      <Loader2 v-if="installingId === plugin.id" class="w-3.5 h-3.5 animate-spin" />
+                      <Check v-else-if="installedIds.includes(plugin.id)" class="w-3.5 h-3.5" />
+                      <span>
+                        {{
+                          installingId === plugin.id
+                            ? $t('plugins.marketInstalling')
+                            : installedIds.includes(plugin.id)
+                              ? $t('plugins.marketInstalled')
+                              : $t('plugins.marketInstall')
+                        }}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+                <div
+                  v-if="confirmingId === plugin.id && preview"
+                  class="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3"
+                >
+                  <p class="text-xs font-medium text-amber-300">{{ $t('plugins.marketConfirm') }}</p>
+                  <div class="flex flex-wrap gap-1.5 mt-2">
+                    <span
+                      v-for="cap in preview.capabilities"
+                      :key="cap"
+                      class="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300"
+                    >
+                      {{ cap }}
+                    </span>
+                  </div>
+                  <p class="text-[11px] text-amber-200/80 mt-2">
+                    {{ $t('plugins.marketConfirmText') }}
+                  </p>
+                  <div class="flex gap-2 mt-3">
+                    <button
+                      class="px-3 py-1.5 rounded-full text-xs bg-amber-500 text-amber-950 font-medium hover:bg-amber-400"
+                      @click="confirmInstall(plugin)"
+                    >
+                      {{ $t('plugins.marketInstall') }}
+                    </button>
+                    <button
+                      class="px-3 py-1.5 rounded-full text-xs bg-surface-variant/40 hover:bg-surface-variant"
+                      @click="cancelConfirm"
+                    >
+                      {{ $t('plugins.cancel') }}
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
-          </template>
+          </div>
         </div>
       </div>
     </div>
   </Transition>
+
+  <Teleport to="body">
+    <Transition name="readme" appear>
+      <div v-if="isOpen && readmePlugin" class="fixed inset-0 z-[100] flex flex-col bg-surface">
+        <div class="shrink-0 flex items-center justify-between px-5 py-4 border-b border-surface-variant/30">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <button
+              class="w-8 h-8 rounded-full hover:bg-surface-variant/40 flex items-center justify-center shrink-0"
+              @click="closeReadme"
+            >
+              <ArrowLeft class="w-4 h-4" />
+            </button>
+            <BookOpen class="w-4 h-4 text-primary shrink-0" />
+            <h2 class="text-base font-semibold truncate">
+              {{ marketPluginName(readmePlugin, locale) }} README
+            </h2>
+          </div>
+          <button
+            class="w-8 h-8 rounded-full hover:bg-surface-variant/40 flex items-center justify-center shrink-0"
+            @click="closeReadme"
+          >
+            <X class="w-4 h-4" />
+          </button>
+        </div>
+        <div class="flex-1 min-h-0 overflow-y-auto">
+          <div class="max-w-3xl mx-auto px-6 py-8">
+            <div v-if="readmeLoading" class="py-16 text-center text-sm text-on-surface-variant">
+              <Loader2 class="w-5 h-5 animate-spin mx-auto mb-2" />
+              {{ $t('plugins.marketLoading') }}
+            </div>
+            <div
+              v-else-if="readmeError"
+              class="p-4 rounded-lg bg-error/10 text-error text-sm border border-error/20"
+            >
+              {{ readmeError }}
+              <button class="underline ml-2" @click="openReadme(readmePlugin!)">
+                {{ $t('plugins.retry') }}
+              </button>
+            </div>
+            <div v-else v-html="readmeContent"></div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -297,10 +313,23 @@
 .mask-leave-to {
   opacity: 0;
 }
+.readme-enter-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.readme-enter-from {
+  opacity: 0;
+  transform: translateY(12px) scale(0.98);
+}
+.readme-leave-active {
+  transition: opacity 0.15s ease;
+}
+.readme-leave-to {
+  opacity: 0;
+}
 </style>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useI18n } from 'vue-i18n';
@@ -313,7 +342,7 @@ import {
 } from '../market';
 import { usePlugins } from '../composables/usePlugins';
 
-defineProps<{ isOpen: boolean }>();
+const props = defineProps<{ isOpen: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 
 const { locale } = useI18n();
@@ -322,12 +351,6 @@ const pluginsState = usePlugins();
 const catalog = ref<{ plugins: MarketPlugin[] }>({ plugins: [] });
 const marketQuery = ref('');
 const kindFilter = ref<string>('all');
-
-const readmePlugin = ref<MarketPlugin | null>(null);
-const readmeLoading = ref(false);
-const readmeError = ref<string | null>(null);
-const readmeContent = ref('');
-
 const filteredCatalog = computed(() => {
   const q = marketQuery.value.trim().toLowerCase();
   return catalog.value.plugins.filter((pl) => {
@@ -340,15 +363,18 @@ const filteredCatalog = computed(() => {
     );
   });
 });
-
 const isLoading = ref(false);
 const loadError = ref<string | null>(null);
 const installedIds = ref<string[]>([]);
 const installingId = ref<string | null>(null);
 const confirmingId = ref<string | null>(null);
 const preview = ref<{ capabilities: string[] } | null>(null);
-
 const openContributionGuide = () => void openUrl(PLUGIN_CONTRIBUTING_URL);
+
+const readmePlugin = ref<MarketPlugin | null>(null);
+const readmeLoading = ref(false);
+const readmeError = ref<string | null>(null);
+const readmeContent = ref('');
 
 interface PluginPreview {
   id: string;
@@ -424,8 +450,7 @@ async function openReadme(plugin: MarketPlugin) {
   try {
     const res = await fetch(plugin.readmeUrl, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    readmeContent.value = parseMarkdown(text);
+    readmeContent.value = parseMarkdown(await res.text());
   } catch (e) {
     readmeError.value = e instanceof Error ? e.message : String(e);
   } finally {
@@ -439,17 +464,57 @@ function closeReadme() {
   readmeError.value = null;
 }
 
-function parseMarkdown(md: string): string {
-  let html = md
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && readmePlugin.value) closeReadme();
+}
+
+watch(
+  () => props.isOpen,
+  (open) => {
+    if (!open) closeReadme();
+  },
+);
+
+function escapeHtml(s: string): string {
+  return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
-  html = html.replace(/```([\s\S]*?)```/g, (_, code) => {
-    return `\n<pre class="bg-slate-800/60 p-4 rounded-lg my-4 overflow-x-auto text-xs text-gray-200 font-mono border border-white/10"><code>${code.trim()}</code></pre>\n`;
+function sanitizeHtml(html: string): string {
+  let out = html.replace(
+    /<(script|style|iframe|object|embed|form|input|textarea|select|button|meta|link|base|svg|math)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,
+    '',
+  );
+  out = out.replace(
+    /<\/?(script|style|iframe|object|embed|form|input|textarea|select|button|meta|link|base|svg|math)\b[^>]*>?/gi,
+    '',
+  );
+  out = out.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)?/gi, '');
+  out = out.replace(/\s(srcdoc|formaction)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)?/gi, '');
+  out = out.replace(/(href|src)\s*=\s*(["']?)\s*(javascript|vbscript)\s*:[^"'>\s]*\2/gi, '$1="#"');
+  out = out.replace(/(href|src)\s*=\s*(["']?)\s*data\s*:\s*text\/html[^"'>\s]*\2/gi, '$1="#"');
+  return out;
+}
+
+function parseMarkdown(md: string): string {
+  const codeBlocks: string[] = [];
+  const inlineCodes: string[] = [];
+
+  let html = md.replace(/```[^\n]*\n?[\s\S]*?```/g, (block) => {
+    const code = block.replace(/```[^\n]*\n?/, '').replace(/\n?```\s*$/, '');
+    codeBlocks.push(escapeHtml(code));
+    return `\u0000CB${codeBlocks.length - 1}\u0000`;
   });
 
-  html = html.replace(/`([^`]+)`/g, '<code class="bg-slate-800/60 px-1.5 py-0.5 rounded text-xs text-emerald-400 font-mono">$1</code>');
+  html = html.replace(/`([^`\n]+)`/g, (_, code: string) => {
+    inlineCodes.push(escapeHtml(code));
+    return `\u0000IC${inlineCodes.length - 1}\u0000`;
+  });
+
+  html = sanitizeHtml(html);
 
   html = html.replace(/^######\s+(.+)$/gm, '<h6 class="text-sm font-bold mt-6 mb-2 text-on-surface">$1</h6>');
   html = html.replace(/^#####\s+(.+)$/gm, '<h5 class="text-base font-bold mt-6 mb-2 text-on-surface">$1</h5>');
@@ -458,33 +523,42 @@ function parseMarkdown(md: string): string {
   html = html.replace(/^##\s+(.+)$/gm, '<h2 class="text-2xl font-bold mt-6 mb-3 text-on-surface border-b border-surface-variant/30 pb-1">$1</h2>');
   html = html.replace(/^#\s+(.+)$/gm, '<h1 class="text-3xl font-bold mt-6 mb-4 text-on-surface">$1</h1>');
 
-  html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-on-surface">$1</strong>');
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  html = html.replace(/\*\*\*([^*]+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  html = html.replace(/\*\*([^*]+?)\*\*/g, '<strong class="font-semibold text-on-surface">$1</strong>');
+  html = html.replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>');
 
-  html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" class="max-w-full rounded-lg my-3 border border-surface-variant/30" />');
-  html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-primary underline hover:text-primary/80 break-all">$1</a>');
+  html = html.replace(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g, '<img src="$2" alt="$1" class="max-w-full rounded-lg my-3 border border-surface-variant/30" />');
+  html = html.replace(/\[([^\]]+)\]\(([^)\s]+)[^)]*\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-primary underline hover:text-primary/80 break-all">$1</a>');
 
-  html = html.replace(/^&gt;\s+(.+)$/gm, '<blockquote class="border-l-4 border-primary/60 pl-4 italic text-on-surface-variant my-3 bg-primary/5 py-2 pr-2 rounded-r">$1</blockquote>');
+  html = html.replace(/^>\s?(.+)$/gm, '<blockquote class="border-l-4 border-primary/60 pl-4 italic text-on-surface-variant my-3 bg-primary/5 py-2 pr-2 rounded-r">$1</blockquote>');
 
   html = html.replace(/^\s*[-*]\s+(.+)$/gm, '<li class="ml-5 list-disc my-1 text-on-surface">$1</li>');
-  
-  html = html.replace(/^---+$/gm, '<hr class="my-6 border-surface-variant/30" />');
+  html = html.replace(/^\s*\d+\.\s+(.+)$/gm, '<li class="ml-5 list-decimal my-1 text-on-surface">$1</li>');
+  html = html.replace(/^(-{3,}|\*{3,}|_{3,})$/gm, '<hr class="my-6 border-surface-variant/30" />');
 
   const blocks = html.split(/\n{2,}/);
-  html = blocks.map(block => {
-    block = block.trim();
-    if (!block) return '';
-    if (/^<(h[1-6]|ul|ol|li|pre|blockquote|img|hr)/.test(block)) {
-      return block;
-    }
-    block = block.replace(/\n/g, '<br>');
-    return `<p class="my-3 text-sm text-on-surface leading-relaxed">${block}</p>`;
-  }).join('\n');
-  
-  html = html.replace(/(<li.*?<\/li>\s*)+/g, (match) => {
-    return `<ul class="my-3 space-y-1.5">${match}</ul>`;
-  });
+  html = blocks
+    .map((block) => {
+      block = block.trim();
+      if (!block) return '';
+      if (/^\u0000CB\d+\u0000$/.test(block)) return block;
+      if (/^<(h[1-6]|ul|ol|li|pre|blockquote|img|hr|div|table|p|details|figure|section)/i.test(block)) return block;
+      return `<p class="my-3 text-sm text-on-surface leading-relaxed">${block.replace(/\n/g, '<br>')}</p>`;
+    })
+    .join('\n');
+
+  html = html.replace(/(<li[\s\S]*?<\/li>\s*)+/g, (match) => `<ul class="my-3 space-y-1.5">${match}</ul>`);
+
+  html = html.replace(
+    /\u0000CB(\d+)\u0000/g,
+    (_, i: string) =>
+      `<pre class="bg-slate-800/60 p-4 rounded-lg my-4 overflow-x-auto text-xs text-gray-200 font-mono border border-white/10"><code>${codeBlocks[Number(i)]}</code></pre>`,
+  );
+  html = html.replace(
+    /\u0000IC(\d+)\u0000/g,
+    (_, i: string) =>
+      `<code class="bg-slate-800/60 px-1.5 py-0.5 rounded text-xs text-emerald-400 font-mono">${inlineCodes[Number(i)]}</code>`,
+  );
 
   return html;
 }
@@ -492,5 +566,10 @@ function parseMarkdown(md: string): string {
 onMounted(() => {
   void load();
   void refreshInstalled();
+  window.addEventListener('keydown', onKeydown);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown);
 });
 </script>

@@ -173,36 +173,46 @@
                       <span v-if="plugin.license">{{ plugin.license }}</span>
                     </p>
                   </div>
-                  <div class="shrink-0 flex items-center gap-2">
+                  <div class="shrink-0 flex flex-col items-end gap-2">
+                    <div class="flex items-center gap-2">
+                      <button
+                        v-if="plugin.readmeUrl"
+                        class="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-surface-variant/40 text-on-surface-variant hover:bg-surface-variant/60 transition-colors"
+                        @click.stop="openReadme(plugin)"
+                      >
+                        <BookOpen class="w-3.5 h-3.5" />
+                        <span>README</span>
+                      </button>
+                      <button
+                        class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-medium transition-colors disabled:opacity-50"
+                        :class="
+                          installedIds.includes(plugin.id)
+                            ? 'bg-surface-variant/40 text-on-surface-variant cursor-default'
+                            : 'bg-primary text-on-primary hover:bg-primary/90'
+                        "
+                        :disabled="installedIds.includes(plugin.id) || installingId === plugin.id"
+                        @click="install(plugin)"
+                      >
+                        <Loader2 v-if="installingId === plugin.id" class="w-3.5 h-3.5 animate-spin" />
+                        <Check v-else-if="installedIds.includes(plugin.id)" class="w-3.5 h-3.5" />
+                        <span>
+                          {{
+                            installingId === plugin.id
+                              ? $t('plugins.marketInstalling')
+                              : installedIds.includes(plugin.id)
+                                ? $t('plugins.marketInstalled')
+                                : $t('plugins.marketInstall')
+                          }}
+                        </span>
+                      </button>
+                    </div>
                     <button
-                      v-if="plugin.readmeUrl"
-                      class="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-surface-variant/40 text-on-surface-variant hover:bg-surface-variant/60 transition-colors"
-                      @click.stop="openReadme(plugin)"
+                      v-if="plugin.homepage"
+                      class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
+                      @click.stop="openHomepage(plugin.homepage)"
                     >
-                      <BookOpen class="w-3.5 h-3.5" />
-                      <span>README</span>
-                    </button>
-                    <button
-                      class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-medium transition-colors disabled:opacity-50"
-                      :class="
-                        installedIds.includes(plugin.id)
-                          ? 'bg-surface-variant/40 text-on-surface-variant cursor-default'
-                          : 'bg-primary text-on-primary hover:bg-primary/90'
-                      "
-                      :disabled="installedIds.includes(plugin.id) || installingId === plugin.id"
-                      @click="install(plugin)"
-                    >
-                      <Loader2 v-if="installingId === plugin.id" class="w-3.5 h-3.5 animate-spin" />
-                      <Check v-else-if="installedIds.includes(plugin.id)" class="w-3.5 h-3.5" />
-                      <span>
-                        {{
-                          installingId === plugin.id
-                            ? $t('plugins.marketInstalling')
-                            : installedIds.includes(plugin.id)
-                              ? $t('plugins.marketInstalled')
-                              : $t('plugins.marketInstall')
-                        }}
-                      </span>
+                      <ExternalLink class="w-3 h-3" />
+                      <span>{{ $t('plugins.marketHomepage') }}</span>
                     </button>
                   </div>
                 </div>
@@ -333,7 +343,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useI18n } from 'vue-i18n';
-import { ArrowLeft, BookOpen, Check, GitPullRequest, Loader2, RefreshCw, Search, Store, X } from '@lucide/vue';
+import { ArrowLeft, BookOpen, Check, ExternalLink, GitPullRequest, Loader2, RefreshCw, Search, Store, X } from '@lucide/vue';
 import {
   loadPluginCatalog,
   marketPluginName,
@@ -370,6 +380,10 @@ const installingId = ref<string | null>(null);
 const confirmingId = ref<string | null>(null);
 const preview = ref<{ capabilities: string[] } | null>(null);
 const openContributionGuide = () => void openUrl(PLUGIN_CONTRIBUTING_URL);
+
+function openHomepage(url: string) {
+  void openUrl(url);
+}
 
 const readmePlugin = ref<MarketPlugin | null>(null);
 const readmeLoading = ref(false);

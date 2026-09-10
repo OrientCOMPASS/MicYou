@@ -20,6 +20,7 @@ export interface MarketPlugin {
   downloadUrl: string;
   previewUrl?: string;
   pageUrl?: string;
+  readmeUrl?: string;
   arches?: string[];
   platforms?: string[];
 }

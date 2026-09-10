@@ -174,7 +174,7 @@
                     </p>
                   </div>
                   <div class="shrink-0 flex flex-col items-end gap-2">
-                    <div class="flex items-center gap-2">
+                    <div :ref="(el) => setRowRef(plugin.id, el)" class="flex items-center gap-2">
                       <button
                         v-if="plugin.readmeUrl"
                         class="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium bg-surface-variant/40 text-on-surface-variant hover:bg-surface-variant/60 transition-colors"
@@ -208,13 +208,18 @@
                     </div>
                     <button
                       v-if="plugin.homepage"
-                      class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors max-w-[280px]"
+                      class="inline-flex flex-col items-start gap-0.5 px-3 py-1.5 rounded-xl text-[11px] font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors min-w-0 max-w-full"
+                      :style="rowMaxStyle(plugin.id)"
                       :title="plugin.homepage"
                       @click.stop="openHomepage(plugin.homepage)"
                     >
-                      <ExternalLink class="w-3 h-3 shrink-0" />
-                      <span class="shrink-0">{{ $t('plugins.marketHomepage') }}</span>
-                      <span class="truncate text-primary/60">{{ homepageLabel(plugin.homepage) }}</span>
+                      <span class="inline-flex items-center gap-1.5 shrink-0">
+                        <ExternalLink class="w-3 h-3" />
+                        <span>{{ $t('plugins.marketHomepage') }}</span>
+                      </span>
+                      <span class="w-full truncate text-left text-[10px] font-normal text-primary/60">
+                        {{ homepageLabel(plugin.homepage) }}
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -394,6 +399,30 @@ function homepageLabel(url: string): string {
   } catch {
     return url.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
   }
+}
+
+const rowWidths = ref<Record<string, number>>({});
+const rowObserver =
+  typeof ResizeObserver === 'undefined'
+    ? null
+    : new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).dataset.pluginRow;
+          if (id) rowWidths.value[id] = entry.contentRect.width;
+        }
+      });
+
+function setRowRef(id: string, el: unknown) {
+  if (el instanceof HTMLElement) {
+    el.dataset.pluginRow = id;
+    rowWidths.value[id] = el.offsetWidth;
+    rowObserver?.observe(el);
+  }
+}
+
+function rowMaxStyle(id: string): Record<string, string> | undefined {
+  const w = rowWidths.value[id];
+  return w ? { maxWidth: `${w}px` } : undefined;
 }
 
 const readmePlugin = ref<MarketPlugin | null>(null);
@@ -596,5 +625,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
+  rowObserver?.disconnect();
 });
 </script>

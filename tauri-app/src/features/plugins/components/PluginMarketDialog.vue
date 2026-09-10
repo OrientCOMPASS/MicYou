@@ -208,11 +208,13 @@
                     </div>
                     <button
                       v-if="plugin.homepage"
-                      class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
+                      class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors max-w-[280px]"
+                      :title="plugin.homepage"
                       @click.stop="openHomepage(plugin.homepage)"
                     >
-                      <ExternalLink class="w-3 h-3" />
-                      <span>{{ $t('plugins.marketHomepage') }}</span>
+                      <ExternalLink class="w-3 h-3 shrink-0" />
+                      <span class="shrink-0">{{ $t('plugins.marketHomepage') }}</span>
+                      <span class="truncate text-primary/60">{{ homepageLabel(plugin.homepage) }}</span>
                     </button>
                   </div>
                 </div>
@@ -383,6 +385,15 @@ const openContributionGuide = () => void openUrl(PLUGIN_CONTRIBUTING_URL);
 
 function openHomepage(url: string) {
   void openUrl(url);
+}
+
+function homepageLabel(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.host}${u.pathname.replace(/\/+$/, '')}`;
+  } catch {
+    return url.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  }
 }
 
 const readmePlugin = ref<MarketPlugin | null>(null);

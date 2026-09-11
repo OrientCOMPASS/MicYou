@@ -1,11 +1,9 @@
 <template>
   <Transition name="dialog" appear>
     <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <Transition name="mask" appear>
-        <div class="absolute inset-0 bg-black/50" @click="emit('close')" />
-      </Transition>
+      <div class="absolute inset-0" @click="emit('close')" />
       <div
-        class="relative w-full max-w-2xl max-h-[80vh] flex flex-col rounded-2xl border border-surface-variant/40 bg-surface shadow-2xl"
+        class="relative w-full max-w-2xl max-h-[80vh] flex flex-col rounded-3xl border border-surface-variant/40 bg-surface shadow-2xl"
       >
         <div class="flex items-center justify-between px-5 py-4 border-b border-surface-variant/30">
           <div class="flex items-center gap-2.5">
@@ -320,14 +318,6 @@
   transition: opacity 0.12s ease;
 }
 .dialog-leave-to {
-  opacity: 0;
-}
-.mask-enter-active,
-.mask-leave-active {
-  transition: opacity 0.18s ease;
-}
-.mask-enter-from,
-.mask-leave-to {
   opacity: 0;
 }
 .readme-enter-active {

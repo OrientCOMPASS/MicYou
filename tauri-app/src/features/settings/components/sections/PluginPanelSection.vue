@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { command } from '@/platform';
-import { buildPanelDocument, usePluginPanelBridge } from '@/features/plugins/composables/usePluginPanelBridge';
-import { sharedColorMode } from '@/features/theme/composables/useTheme';
+import {
+  buildPanelDocument,
+  pushPanelTheme,
+  usePluginPanelBridge,
+} from '@/features/plugins/composables/usePluginPanelBridge';
+import { useTheme } from '@/features/theme/composables/useTheme';
 
 // The settings window keys this component by panel, so props never change
 // while it is mounted.
@@ -13,13 +17,33 @@ const props = defineProps<{
 }>();
 
 const { locale } = useI18n();
-const colorMode = sharedColorMode();
+const theme = useTheme();
 const frame = ref<HTMLIFrameElement | null>(null);
 const { handleMessage } = usePluginPanelBridge(props.pluginId, frame);
 
 const panelHtml = ref('');
 const loading = ref(false);
 const error = ref<string | null>(null);
+
+// Everything that changes the injected CSS tokens. Watching this instead of
+// only `colorMode` also covers accent, custom and packaged themes.
+const themeKey = computed(() =>
+  [
+    theme.colorMode.value,
+    theme.themeMode.value,
+    theme.themeColor.value,
+    theme.customH.value,
+    theme.customS.value,
+    theme.customL.value,
+    theme.customVariant.value,
+    theme.uiStyle.value,
+    theme.installedThemeId.value,
+    theme.installedThemeCss.value,
+    theme.customCss.value,
+    theme.customCssEnabled.value,
+    theme.systemAccent.value.hex,
+  ].join('\u0001'),
+);
 
 async function load() {
   loading.value = true;
@@ -38,8 +62,12 @@ async function load() {
   }
 }
 
-// Panels render with the host theme and locale, so reload when either changes.
-watch([colorMode, locale], () => void load());
+// Re-inject tokens without reloading: a reload would discard unsaved edits.
+watch(themeKey, () => {
+  void nextTick(() => pushPanelTheme(frame));
+});
+// Text is baked into the document, so a language switch reloads it.
+watch(locale, () => void load());
 
 onMounted(() => {
   window.addEventListener('message', handleMessage);

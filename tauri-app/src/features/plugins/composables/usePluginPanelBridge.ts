@@ -40,22 +40,121 @@ const CONSOLE_HOOK = `<script>
   })();
 <\/script>`;
 
-/** The host theme as CSS variables, so panels match and follow the app theme. */
+/** Material 3 tokens every panel can rely on. Reading them explicitly keeps
+ *  them available on WebKit builds that omit custom properties from the
+ *  computed-style enumeration. */
+const THEME_TOKENS = [
+  '--background',
+  '--foreground',
+  '--surface',
+  '--on-surface',
+  '--surface-bright',
+  '--surface-container',
+  '--surface-container-low',
+  '--surface-variant',
+  '--on-surface-variant',
+  '--outline',
+  '--border',
+  '--primary',
+  '--on-primary',
+  '--primary-container',
+  '--on-primary-container',
+  '--secondary',
+  '--on-secondary',
+  '--secondary-container',
+  '--on-secondary-container',
+  '--tertiary',
+  '--on-tertiary',
+  '--error',
+  '--on-error',
+  '--radius',
+  '--card',
+  '--card-foreground',
+  '--popover',
+  '--popover-foreground',
+  '--primary-foreground',
+  '--secondary-foreground',
+  '--muted',
+  '--muted-foreground',
+  '--accent',
+  '--accent-foreground',
+  '--destructive',
+  '--destructive-foreground',
+  '--input',
+  '--ring',
+];
+
+/** The host theme as CSS variables, so panels match and follow the app theme.
+ *  The values are the raw HSL component triples the host stores (for example
+ *  `--surface: 215 15% 98%`), exactly like the main app: panels must write
+ *  `hsl(var(--surface))`, not `var(--surface)`. */
 function collectThemeVars(): string {
   const style = getComputedStyle(document.documentElement);
-  const vars: string[] = [];
+  const names = new Set<string>(THEME_TOKENS);
   for (let i = 0; i < style.length; i++) {
     const name = style[i];
-    if (name.startsWith('--')) {
-      vars.push(`${name}: ${style.getPropertyValue(name)};`);
-    }
+    if (name.startsWith('--')) names.add(name);
   }
+  const vars: string[] = [];
+  for (const name of names) {
+    const value = style.getPropertyValue(name).trim();
+    if (value) vars.push(`${name}: ${value};`);
+  }
+  // Native widgets inside a sandboxed iframe (select popups, scrollbars) do
+  // not inherit the host's dark class, so forward the resolved mode too.
+  const dark = document.documentElement.classList.contains('dark');
+  vars.push(`--micyou-color-scheme: ${dark ? 'dark' : 'light'};`);
   return vars.join('\n');
+}
+
+/** Replaces the injected theme block when the user changes the app theme. */
+const THEME_HOOK = `<script>
+  (function () {
+    function apply(vars) {
+      var style = document.getElementById('micyou-theme-vars');
+      if (!style) {
+        style = document.createElement('style');
+        style.id = 'micyou-theme-vars';
+        (document.head || document.documentElement).appendChild(style);
+      }
+      style.textContent = ':root{' + vars + '}';
+    }
+    window.addEventListener('message', function (e) {
+      var d = e.data;
+      if (d && d.__micyou === 1 && d.type === 'theme' && typeof d.vars === 'string') apply(d.vars);
+    });
+  })();
+<\/script>`;
+
+/** Injects before the first panel script, without putting markup ahead of the
+ *  doctype (that would force the iframe into quirks mode). */
+function injectIntoHead(html: string, snippet: string): string {
+  const head = /<head(?:\s[^>]*)?>/i.exec(html);
+  if (head) {
+    const at = head.index + head[0].length;
+    return html.slice(0, at) + snippet + html.slice(at);
+  }
+  const doctype = /^\s*<!doctype[^>]*>/i.exec(html);
+  if (doctype) {
+    const at = doctype[0].length;
+    return html.slice(0, at) + snippet + html.slice(at);
+  }
+  return snippet + html;
 }
 
 /** Wraps plugin panel HTML with the host theme and the console bridge. */
 export function buildPanelDocument(html: string): string {
-  return `<style>:root{${collectThemeVars()}}</style>${CONSOLE_HOOK}${html}`;
+  const theme = `<style id="micyou-theme-vars">:root{${collectThemeVars()}}</style>`;
+  return injectIntoHead(html, `${theme}${CONSOLE_HOOK}${THEME_HOOK}`);
+}
+
+/** Push the current theme into a mounted panel without reloading it (a reload
+ *  would throw away unsaved edits in the panel's form). */
+export function pushPanelTheme(frame: Ref<HTMLIFrameElement | null>): void {
+  frame.value?.contentWindow?.postMessage(
+    { __micyou: 1, type: 'theme', vars: collectThemeVars() },
+    '*',
+  );
 }
 
 /**

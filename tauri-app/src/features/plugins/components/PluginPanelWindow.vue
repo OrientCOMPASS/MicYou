@@ -4,21 +4,49 @@
  * 由 open_plugin_window 命令创建，hash 路由 #/plugin/:pluginId/:panelId
  * 复用设置对话框的面板渲染逻辑（沙箱 iframe + postMessage 桥 + 主题注入）
  */
-import { ref, onMounted, onUnmounted } from 'vue';
-import { buildPanelDocument, usePluginPanelBridge } from '../composables/usePluginPanelBridge';
+import { computed, nextTick, ref, onMounted, onUnmounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+import {
+  buildPanelDocument,
+  pushPanelTheme,
+  usePluginPanelBridge,
+} from '../composables/usePluginPanelBridge';
 import { appWindow, command } from '@/platform';
 import { useWindowTransition } from '@/features/window/composables/useWindowTransition';
+import { useTheme } from '@/features/theme/composables/useTheme';
 
 const hash = window.location.hash; // #/plugin/<pluginId>/<panelId>
 const parts = hash.replace('#/plugin/', '').split('/');
 const pluginId = decodeURIComponent(parts[0] ?? '');
 const panelId = decodeURIComponent(parts[1] ?? '');
 
+// This window is a separate webview: App.vue/SettingsWindow never mount here,
+// so apply the theme tokens and the dark class explicitly.
+const theme = useTheme();
+const { locale } = useI18n();
 const panelHtml = ref('');
 const loading = ref(true);
 const error = ref<string | null>(null);
 const frame = ref<HTMLIFrameElement | null>(null);
 const { handleMessage } = usePluginPanelBridge(pluginId, frame);
+
+const themeKey = computed(() =>
+  [
+    theme.colorMode.value,
+    theme.themeMode.value,
+    theme.themeColor.value,
+    theme.customH.value,
+    theme.customS.value,
+    theme.customL.value,
+    theme.customVariant.value,
+    theme.uiStyle.value,
+    theme.installedThemeId.value,
+    theme.installedThemeCss.value,
+    theme.customCss.value,
+    theme.customCssEnabled.value,
+    theme.systemAccent.value.hex,
+  ].join('\u0001'),
+);
 
 async function load() {
   loading.value = true;
@@ -32,6 +60,11 @@ async function load() {
     loading.value = false;
   }
 }
+
+watch(themeKey, () => {
+  void nextTick(() => pushPanelTheme(frame));
+});
+watch(locale, () => void load());
 
 const windowRoot = ref<HTMLElement | null>(null);
 const transition = useWindowTransition(windowRoot);

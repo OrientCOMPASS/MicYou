@@ -51,3 +51,27 @@ jobs:
         run: |
           Get-PnpDevice -Class AudioEndpoint -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -match 'Steam' } | Format-List FriendlyName,Status,InstanceId
           Get-Service Audiosrv | Format-List Status,Name
+      - name: Build dummy installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force tauri-app/target/release | Out-Null
+          Set-Content tauri-app/target/release/micyou.exe 'dummy'
+          New-Item -ItemType Directory -Force tauri-app/src-tauri/binaries | Out-Null
+          Set-Content tauri-app/src-tauri/binaries/micyou-cli-x86_64-pc-windows-msvc.exe 'dummy'
+          Set-Content tauri-app/src-tauri/binaries/micyou-tui-x86_64-pc-windows-msvc.exe 'dummy'
+          Push-Location tauri-app
+          iscc /DMyAppVersion=2.2.0 src-tauri/installer.iss
+          Pop-Location
+      - name: Run installer silently
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem tauri-app/src-tauri/target/release/bundle/inno/*.exe | Select-Object -First 1
+          Write-Output "setup=$($setup.FullName)"
+          $log = Join-Path $env:TEMP 'micyou-install.log'
+          $p = Start-Process -FilePath $setup.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/LOG=$log" -Wait -PassThru
+          Write-Output "installer_exit=$($p.ExitCode)"
+          Write-Output '--- installer log tail ---'
+          if (Test-Path $log) { Get-Content $log -Tail 100 }
+          $dev = Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object { $_.InstanceId -like '*STEAMSTREAMINGMICROPHONE*' }
+          if ($dev) { Write-Output 'INSTALLER_CREATED_DEVICE'; $dev | Format-List FriendlyName,Status,InstanceId } else { Write-Output 'INSTALLER_NO_DEVICE' }
+          Get-PnpDevice -Class AudioEndpoint -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -match 'Steam' } | Format-List FriendlyName,Status,InstanceId

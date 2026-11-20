@@ -13,44 +13,13 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Show elevation
+      - name: Show elevation and clean state
         shell: pwsh
         run: |
           whoami
           whoami /groups | Select-String -Pattern 'S-1-16-12288|High Mandatory'
-      - name: Current pnputil path
-        shell: pwsh
-        run: |
-          $inf = Resolve-Path 'tauri-app/src-tauri/resources/steam-audio/x64/SteamStreamingMicrophone.inf'
-          Write-Output "INF=$inf"
-          & pnputil.exe /add-driver $inf /install
-          Write-Output "pnputil_exit=$LASTEXITCODE"
-          Start-Sleep -Seconds 5
           $dev = Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object { $_.InstanceId -like '*STEAMSTREAMINGMICROPHONE*' }
-          if ($dev) { Write-Output 'PNPUTIL_CREATED_DEVICE'; $dev | Format-List FriendlyName,Status,InstanceId } else { Write-Output 'PNPUTIL_NO_DEVICE' }
-      - name: DiInstallDriverW path
-        shell: pwsh
-        run: |
-          $inf = (Resolve-Path 'tauri-app/src-tauri/resources/steam-audio/x64/SteamStreamingMicrophone.inf').Path
-          Add-Type @"
-          using System;
-          using System.Runtime.InteropServices;
-          public static class NewDev {
-            [DllImport("newdev.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-            public static extern bool DiInstallDriverW(IntPtr hwndParent, string infPath, uint flags, out int needReboot);
-          }
-          "@
-          $reboot = 0
-          $ok = [NewDev]::DiInstallDriverW([IntPtr]::Zero, $inf, 0, [ref]$reboot)
-          Write-Output "DiInstallDriverW=$ok reboot=$reboot lastError=$([ComponentModel.Win32Exception]::new([Runtime.InteropServices.Marshal]::GetLastWin32Error()).Message)"
-          Start-Sleep -Seconds 8
-          $dev = Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object { $_.InstanceId -like '*STEAMSTREAMINGMICROPHONE*' }
-          if ($dev) { Write-Output 'DI_CREATED_DEVICE'; $dev | Format-List FriendlyName,Status,InstanceId } else { Write-Output 'DI_NO_DEVICE' }
-      - name: Audio endpoints
-        shell: pwsh
-        run: |
-          Get-PnpDevice -Class AudioEndpoint -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -match 'Steam' } | Format-List FriendlyName,Status,InstanceId
-          Get-Service Audiosrv | Format-List Status,Name
+          if ($dev) { Write-Output 'PREEXISTING_DEVICE'; $dev | Format-List FriendlyName,Status,InstanceId } else { Write-Output 'CLEAN: no Steam Streaming Microphone device' }
       - name: Build dummy installer
         shell: pwsh
         run: |
@@ -70,8 +39,31 @@ jobs:
           $log = Join-Path $env:TEMP 'micyou-install.log'
           $p = Start-Process -FilePath $setup.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/LOG=$log" -Wait -PassThru
           Write-Output "installer_exit=$($p.ExitCode)"
-          Write-Output '--- installer log tail ---'
-          if (Test-Path $log) { Get-Content $log -Tail 100 }
+          Write-Output '--- installer log ---'
+          if (Test-Path $log) { Get-Content $log | Select-String -Pattern 'Steam|pnputil|PowerShell|Sysnative|configure' }
+          Start-Sleep -Seconds 5
           $dev = Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object { $_.InstanceId -like '*STEAMSTREAMINGMICROPHONE*' }
           if ($dev) { Write-Output 'INSTALLER_CREATED_DEVICE'; $dev | Format-List FriendlyName,Status,InstanceId } else { Write-Output 'INSTALLER_NO_DEVICE' }
           Get-PnpDevice -Class AudioEndpoint -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -match 'Steam' } | Format-List FriendlyName,Status,InstanceId
+      - name: Diagnose configure.ps1
+        shell: pwsh
+        run: |
+          $ps64 = Join-Path $env:SystemRoot 'Sysnative\WindowsPowerShell\v1.0\powershell.exe'
+          Write-Output "ps64=$ps64 exists=$(Test-Path $ps64)"
+          Write-Output '--- 64-bit PowerShell ---'
+          & $ps64 -NoProfile -ExecutionPolicy Bypass -File tauri-app/src-tauri/resources/steam-audio/configure.ps1 2>&1 | ForEach-Object { "CONFIG64: $_" }
+          Write-Output "configure64_exit=$LASTEXITCODE"
+          Write-Output '--- endpoint registry ---'
+          Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render' -ErrorAction SilentlyContinue | ForEach-Object {
+            $p = Get-ItemProperty "$($_.PSPath)\Properties" -ErrorAction SilentlyContinue
+            if ($p.'{b3f8fa53-0004-438e-9003-51a46e139bfc},6' -eq 'Steam Streaming Microphone') {
+              Write-Output "RENDER $($_.PSChildName)"
+              $p | Format-List
+            }
+          }
+          Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Capture' -ErrorAction SilentlyContinue | ForEach-Object {
+            $p = Get-ItemProperty "$($_.PSPath)\Properties" -ErrorAction SilentlyContinue
+            if ($p.'{b3f8fa53-0004-438e-9003-51a46e139bfc},6' -eq 'Steam Streaming Microphone') {
+              Write-Output "CAPTURE $($_.PSChildName)"
+            }
+          }

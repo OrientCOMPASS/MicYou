@@ -159,6 +159,7 @@ begin
   end;
 
   RebootRequired := False;
+  Log('pnputil: ' + NativeSystemFile('pnputil.exe'));
   if (not Exec(NativeSystemFile('pnputil.exe'),
       '/add-driver "' + SpeakerInf + '" /install', '', SW_HIDE,
       ewWaitUntilTerminated, ResultCode)) or

@@ -41,6 +41,8 @@ jobs:
           Write-Output "installer_exit=$($p.ExitCode)"
           Write-Output '--- installer log ---'
           if (Test-Path $log) { Get-Content $log | Select-String -Pattern 'Steam|pnputil|PowerShell|Sysnative|configure' }
+          $cfgLog = Join-Path $env:APPDATA 'micyou\steam-audio-configure.log'
+          if (Test-Path $cfgLog) { Write-Output '--- configure log ---'; Get-Content $cfgLog } else { Write-Output 'NO_CONFIGURE_LOG' }
           Start-Sleep -Seconds 5
           $dev = Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object { $_.InstanceId -like '*STEAMSTREAMINGMICROPHONE*' }
           if ($dev) { Write-Output 'INSTALLER_CREATED_DEVICE'; $dev | Format-List FriendlyName,Status,InstanceId } else { Write-Output 'INSTALLER_NO_DEVICE' }

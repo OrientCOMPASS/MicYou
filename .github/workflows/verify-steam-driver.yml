@@ -1,0 +1,53 @@
+name: Verify Steam driver install
+
+on:
+  push:
+    branches: [ci/verify-steam-driver]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Show elevation
+        shell: pwsh
+        run: |
+          whoami
+          whoami /groups | Select-String -Pattern 'S-1-16-12288|High Mandatory'
+      - name: Current pnputil path
+        shell: pwsh
+        run: |
+          $inf = Resolve-Path 'tauri-app/src-tauri/resources/steam-audio/x64/SteamStreamingMicrophone.inf'
+          Write-Output "INF=$inf"
+          & pnputil.exe /add-driver $inf /install
+          Write-Output "pnputil_exit=$LASTEXITCODE"
+          Start-Sleep -Seconds 5
+          $dev = Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object { $_.InstanceId -like '*STEAMSTREAMINGMICROPHONE*' }
+          if ($dev) { Write-Output 'PNPUTIL_CREATED_DEVICE'; $dev | Format-List FriendlyName,Status,InstanceId } else { Write-Output 'PNPUTIL_NO_DEVICE' }
+      - name: DiInstallDriverW path
+        shell: pwsh
+        run: |
+          $inf = (Resolve-Path 'tauri-app/src-tauri/resources/steam-audio/x64/SteamStreamingMicrophone.inf').Path
+          Add-Type @"
+          using System;
+          using System.Runtime.InteropServices;
+          public static class NewDev {
+            [DllImport("newdev.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+            public static extern bool DiInstallDriverW(IntPtr hwndParent, string infPath, uint flags, out int needReboot);
+          }
+          "@
+          $reboot = 0
+          $ok = [NewDev]::DiInstallDriverW([IntPtr]::Zero, $inf, 0, [ref]$reboot)
+          Write-Output "DiInstallDriverW=$ok reboot=$reboot lastError=$([ComponentModel.Win32Exception]::new([Runtime.InteropServices.Marshal]::GetLastWin32Error()).Message)"
+          Start-Sleep -Seconds 8
+          $dev = Get-PnpDevice -ErrorAction SilentlyContinue | Where-Object { $_.InstanceId -like '*STEAMSTREAMINGMICROPHONE*' }
+          if ($dev) { Write-Output 'DI_CREATED_DEVICE'; $dev | Format-List FriendlyName,Status,InstanceId } else { Write-Output 'DI_NO_DEVICE' }
+      - name: Audio endpoints
+        shell: pwsh
+        run: |
+          Get-PnpDevice -Class AudioEndpoint -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -match 'Steam' } | Format-List FriendlyName,Status,InstanceId
+          Get-Service Audiosrv | Format-List Status,Name

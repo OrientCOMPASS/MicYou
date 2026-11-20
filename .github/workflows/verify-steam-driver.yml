@@ -48,7 +48,7 @@ jobs:
       - name: Diagnose configure.ps1
         shell: pwsh
         run: |
-          $ps64 = Join-Path $env:SystemRoot 'Sysnative\WindowsPowerShell\v1.0\powershell.exe'
+          $ps64 = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
           Write-Output "ps64=$ps64 exists=$(Test-Path $ps64)"
           Write-Output '--- 64-bit PowerShell ---'
           & $ps64 -NoProfile -ExecutionPolicy Bypass -File tauri-app/src-tauri/resources/steam-audio/configure.ps1 2>&1 | ForEach-Object { "CONFIG64: $_" }
